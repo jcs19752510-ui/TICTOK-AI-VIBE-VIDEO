@@ -38,7 +38,7 @@
 **푸시 후 (끝났다고 말하기 전에 반드시)**
 1. `git fetch` 후 원격 SHA와 로컬 SHA가 같은지 확인한다.
 2. `gh api repos/<소유자>/<저장소>/commits/<sha>`로 **verified=true**인지 확인한다. 아니면 즉시 고친다.
-3. `bash ~/.claude/stop-hook-git-check.sh`를 직접 실행해 종료코드 0을 확인한다.
+3. `timeout 60 bash ~/.claude/stop-hook-git-check.sh < /dev/null`로 직접 실행해 종료코드 0을 확인한다. **입력을 닫지(`< /dev/null`) 않으면 스크립트가 stdin을 기다리며 멈춘다.** 시간 제한이 있는 명령은 `git push` 같은 핵심 명령과 한 덩어리로 묶지 말고 따로 실행해서, 어느 단계에서 멈췄는지 알 수 있게 한다.
 4. 이력을 건드렸다면 다른 브랜치(`main`, `PROD`)가 그대로인지도 확인한다.
 
 **이력 재작성(rebase, filter-branch, amend 후 강제 푸시)은 기본 금지다.** 사용자가 명시적으로 요청했을 때만 하고, 그때는 아래를 모두 지킨다.
