@@ -40,8 +40,9 @@ chk("S07", "영상에 그려지는 글자(player.html, 자막, 나레이션)에 
 _md = text[os.path.join(vdir, "01_코딩몰라도앱만들었습니다.md")]
 _rows = [l for l in _md.splitlines() if re.match(r"\|\s*\d+\s*\|\s*\d+:\d+", l)]  # 장면표 15행만
 chk("S07b", "장면표 설명 열이 목업 표기(AI 대화창)와 일치: 장면표에 'Claude' 문구 없음", len(_rows) == 15 and not any("Claude" in l for l in _rows), f"{len(_rows)}행 검사")
-chk("S08", "'재현 화면' 표기가 목업 장면 전부에 있음", html.count("재현 화면") >= 2 and "MOCK" in html)
-chk("S09", "AI 생성 음성·BGM 없음 (오디오는 무음 AAC)", True, "DEC-010, DEC-013")
+chk("S08", "'재현 화면'(목업 장면)과 'AI 음성'(전 장면) 배지 표기 + 설명글에 AI 음성 표기", html.count("재현 화면") >= 2 and "MOCK" in html and "AI 음성</div>" in html and "AI 음성(합성)" in text[os.path.join(vdir, "01_코딩몰라도앱만들었습니다.md")])
+_md2 = text[os.path.join(vdir, "01_코딩몰라도앱만들었습니다.md")]
+chk("S09", "배경음악 미사용(문서에 BGM 언급 없음) + 음성은 AI 음성으로 DEC-017에 기록", "BGM" not in _md2 and "DEC-017" in text[os.path.join(root, "docs/harness/decisions.md")], "DEC-016, DEC-017")
 out = subprocess.check_output(["ffprobe", "-v", "error", "-show_entries", "format_tags", "-of", "json", mp4]).decode()
 chk("S10", "mp4 메타데이터에 개인정보 없음", not re.search(r"@|/home/|/root/", out), out.replace("\n", " "))
 png = open(thumb, "rb").read()

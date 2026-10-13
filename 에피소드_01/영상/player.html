@@ -220,7 +220,8 @@ function frameHtml(t, sc, lt) {
   var ca = E(P(lt, 0.05, 0.4));
   var h = '<div class="abs" style="left:0;top:0;width:' + (W * clamp(t / EP.total)) + 'px;height:8px;background:#38c9bb"></div>';
   h += '<div class="chip" style="left:48px;top:60px;padding:12px 28px;font-size:32px;background:#16232b;border:3px solid #2f4651">' + esc(EP.channel) + " · " + EP.series + "</div>";
-  if (MOCK[sc.id]) h += '<div class="chip" style="right:48px;top:60px;padding:12px 28px;font-size:32px;background:#ffb020;color:#2a1c00">재현 화면</div>';
+  h += '<div class="chip" style="right:48px;top:60px;padding:12px 28px;font-size:32px;background:#38c9bb;color:#06201d">AI 음성</div>';
+  if (MOCK[sc.id]) h += '<div class="chip" style="right:240px;top:60px;padding:12px 28px;font-size:32px;background:#ffb020;color:#2a1c00">재현 화면</div>';
   h += '<div class="abs" style="left:0;top:0;width:1080px;height:1920px;opacity:' + fadeIn + '">' + SCENE[sc.id](lt) + "</div>";
   h += box(60, 1058, 120, 10, "border-radius:5px;background:#38c9bb;opacity:" + ca);
   h += box(60, 1090, 960, 190, "font-size:" + big + "px;font-weight:900;line-height:1.25;letter-spacing:-.01em;opacity:" + ca + ";transform:translateY(" + ((1 - ca) * 24) + "px)", esc(cap));

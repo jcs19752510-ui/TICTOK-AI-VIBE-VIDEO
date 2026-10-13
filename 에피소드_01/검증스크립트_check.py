@@ -70,7 +70,8 @@ chk("T17", "다음 편 예고 포함 (시리즈 설계)", "다음 편" in rows[-
 chk("T18", "1/30 첫 편: 이전 편 연결 대신 채널 소개로 대체함을 명시", "1/30" in t)
 
 # human smell
-chk("T19", "사람 냄새: 1인칭 대사 + 막힌 부분 장면 포함", "제가 직접" in joined and any("막혔" in r["nar"] for r in rows))
+_bad = [w for w in ("제가 직접", "저도", "시켜봤", "눌러봤", "적었", "줬어요", "막혔") if w in joined]
+chk("T19", "재현 영상 정직성(DEC-015): 경험 단정 표현 없음 + 막힌 상황 장면(삭제 버튼 안 눌림) 포함", not _bad and any("안 눌려요" in r["nar"] for r in rows), str(_bad))
 
 # transparency
 chk("T20", "AI 사용 투명성: 설명글/체크리스트에 AI 표시 안내", "AI 음성" in t and "AI 생성물 표시" in t)
@@ -82,11 +83,9 @@ chk("T21", "보안 한 줄 (개인정보·비밀번호·API 키) 대본과 템�
 chk("T22", "화면 입력 프롬프트 예시 포함", "프롬프트 예시 ①" in t and "프롬프트 예시 ②" in t and "예시 ①" in t and "예시 ②" in t)
 
 # verify unknowns flagged
-_need = {"메뉴명": None, "요금제": None, "해시태그": None, "BGM": None}
-_lines = t.splitlines()
-for k in _need:
-    _need[k] = any(k in l and "확인 필요" in l for l in _lines)
-chk("T23", "불확실 정보 4종(메뉴명·요금제·해시태그 분류·BGM) 각각 같은 줄에 '확인 필요' 표기", all(_need.values()), str(_need))
+_hl = [l for l in t.splitlines() if "해시태그" in l and "확인 필요" in l]
+_src = ("support.claude.com/en/articles/17153992" in t) and ("claude.com/pricing" in t) and ("2026-10-13" in t)
+chk("T23", "불확실 항목(해시태그 규모)은 '확인 필요'로 남기고, 확인된 항목(메뉴명·요금제)은 출처·조회일을 기재", bool(_hl) and _src, f"해시태그 줄 {len(_hl)}개, 출처·조회일 {_src}")
 
 # no invented prices / model names
 chk("T24", "가격·요금 수치·특정 모델명 지어내지 않음", not re.search(r"\d+\s*(원|달러|\$)", t) and not re.search(r"(Opus|Sonnet|Haiku|GPT-?\d)", t))
@@ -105,7 +104,7 @@ chk("T27", "썸네일 문구 + 디자인 지시", "문구" in e and "배경" in 
 
 # F
 f = t[t.find("## F. "):t.find("## G. ")]
-chk("T28", "F 가이드 5요소(화면녹화·확대·BGM·자막·편집)", all(k in f for k in ["화면 녹화", "확대", "BGM", "자막 스타일", "편집"]))
+chk("T28", "F 가이드 5요소(재현 화면·확대·자막·편집·배경음악 미사용)", all(k in f for k in ["재현 화면", "확대", "자막 스타일", "편집", "배경음악"]) and "BGM 분위기" not in f)
 
 out = [dict(id=a, name=b, result=c, detail=d) for a, b, c, d in res]
 print(json.dumps(out, ensure_ascii=False, indent=1))

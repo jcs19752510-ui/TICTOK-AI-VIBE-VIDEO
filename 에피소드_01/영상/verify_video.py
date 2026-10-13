@@ -31,13 +31,35 @@ chk("V03", "프레임레이트 30fps", num / den == 30, v["r_frame_rate"])
 nb = int(v.get("nb_frames", 0))
 chk("V04", "총 프레임 수 1890", nb == EP["frames"], nb)
 chk("V05", "코덱 H.264, 픽셀 포맷 yuv420p (틱톡 업로드 호환)", v["codec_name"] == "h264" and v["pix_fmt"] == "yuv420p", f'{v["codec_name"]}/{v["pix_fmt"]}')
-chk("V06", "오디오 트랙 존재 (무음, AAC)", len(as_) == 1 and as_[0]["codec_name"] == "aac", [a["codec_name"] for a in as_])
+chk("V06", "오디오 트랙 존재 (AAC, 48kHz)", len(as_) == 1 and as_[0]["codec_name"] == "aac" and as_[0]["sample_rate"] == "48000", [(a["codec_name"], a["sample_rate"]) for a in as_])
 adur = float(as_[0]["duration"]) if as_ else -1
 chk("V07", "오디오·영상 길이 차이 0.1초 이하 (싱크)", abs(adur - dur) <= 0.1, f"영상 {dur:.3f} / 오디오 {adur:.3f}")
 size = os.path.getsize(mp4)
 chk("V08", "파일 크기 50MB 이하", size <= 50 * 2**20, f"{size / 2**20:.2f}MB")
 tags = fmt["format"].get("tags", {})
 chk("V09", "컨테이너 메타데이터에 개인정보 없음 (이메일·경로 패턴 검사)", not re.search(r"@|/home/|/root/", json.dumps(tags, ensure_ascii=False)), json.dumps(tags, ensure_ascii=False))
+
+
+# ---- 음성 검수 ----
+def run(*a):
+    return subprocess.run(a, capture_output=True, text=True)
+
+vol = run("ffmpeg", "-hide_banner", "-i", mp4, "-af", "volumedetect", "-vn", "-f", "null", "-").stderr
+mean = float(re.search(r"mean_volume: (-?[\d.]+) dB", vol).group(1)); peak = float(re.search(r"max_volume: (-?[\d.]+) dB", vol).group(1))
+chk("V18", "음성이 들어 있음: 평균 음량 −35dB 초과(무음 −91dB 아님)", mean > -35, f"평균 {mean}dB")
+chk("V19", "음량 적정: 최대 피크 −1dB 이하(클리핑 없음), 평균 −26dB 이상", peak <= -1 and mean >= -26, f"피크 {peak}dB, 평균 {mean}dB")
+sd = run("ffmpeg", "-hide_banner", "-i", mp4, "-af", "silencedetect=noise=-40dB:d=0.25", "-vn", "-f", "null", "-").stderr
+starts = [float(x) for x in re.findall(r"silence_start: ([\d.]+)", sd)]
+ends = [float(x) for x in re.findall(r"silence_end: ([\d.]+)", sd)]
+# 음성 구간 = 무음 구간 사이. 무음 끝(silence_end)이 음성 시작
+speech_starts = [0.0 if (not starts or starts[0] > 0.05) else None] + ends
+speech_starts = [s for s in speech_starts if s is not None]
+chk("V20", "음성 시작이 15장면 각각 [장면 시작, 장면 시작+0.9초] 안에 있음(싱크)", len(speech_starts) >= 15 and all(any(sc["start"] <= s <= sc["start"] + 0.9 for s in speech_starts) for sc in EP["scenes"]),
+    [(sc["id"], next((round(s, 2) for s in speech_starts if sc["start"] <= s <= sc["start"] + 0.9), None)) for sc in EP["scenes"]])
+last_end = starts[-1] if starts else dur
+chk("V21", "마지막 음성이 영상 끝 0.2초 전에 끝남(잘림 없음)", last_end <= dur - 0.2, f"마지막 음성 끝 {last_end:.2f}s / 영상 {dur:.2f}s")
+dec = run("ffmpeg", "-v", "error", "-i", mp4, "-f", "null", "-")
+chk("V22", "ffmpeg 전체 디코딩(영상+오디오) 오류 0건", dec.returncode == 0 and dec.stderr.strip() == "", dec.stderr.strip()[:200] or "오류 없음")
 
 # 자막
 caps = [s["caption"] for s in EP["scenes"]]
