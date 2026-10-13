@@ -139,6 +139,7 @@ if os.path.exists(CUTS):
         ga = (st[i + 1] - en[i]) if i + 1 < N else total_src - en[i]
         # 앞뒤 여유는 이웃 장면과의 간격의 절반을 넘기지 않는다(붙어 있는 장면은 0). 이웃 대사 조각이 섞이지 않게 하기 위함
         c = clip_info(i + 1, src, st[i], en[i], pre=min(PRE, max(0.0, gb) / 2), post=min(POST, max(0.0, ga) / 2))
+        c["cues_src"] = cs[i].get("cues")     # 구절 시각(촬영본 기준 초). 아래에서 장면 기준으로 바꾼다
         c["contig_prev"] = bool(i) and abs(st[i] - en[i - 1]) < 1e-6
         c["contig_next"] = i + 1 < N and abs(st[i + 1] - en[i]) < 1e-6
         clips.append(c)
@@ -174,6 +175,8 @@ for sc, c in zip(base["scenes"], clips):
     scenes.append(dict(sc, start=round(cursor, 4), end=round(cursor + d, 4), duration=round(d, 4), base_duration=sc["duration"]))
     c["start"] = round(cursor, 4); c["len"] = round(L, 4)
     c.setdefault("contig_prev", False); c.setdefault("contig_next", False)
+    if c.get("cues_src"):   # 촬영본 시각 -> 장면 안 시각(장면은 clip 시작 ss부터 소리가 나오므로 t - ss)
+        scenes[-1]["cues"] = {k: round(v - c["ss"], 3) for k, v in c["cues_src"].items()}
     c["speech_t0"] = round(cursor + (c["speech_start"] - c["ss"]), 3); c["speech_t1"] = round(cursor + (c["speech_end"] - c["ss"]), 3)
     rows.append((sc["id"], sc["duration"], round(L, 2), round(d, 2)))
     cursor += d
