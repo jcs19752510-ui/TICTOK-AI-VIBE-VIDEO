@@ -126,5 +126,8 @@
    }
   }
  ],
- "mock_badge": false
+ "mock_badge": false,
+ "denoise": {
+  "wet": 0.7
+ }
 }

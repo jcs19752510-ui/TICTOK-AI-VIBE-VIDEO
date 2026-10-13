@@ -445,5 +445,8 @@
    "contig_prev": false,
    "contig_next": false
   }
- ]
+ ],
+ "denoise": {
+  "wet": 0.7
+ }
 }

@@ -122,9 +122,17 @@ if os.path.exists(CUTS):
     src = os.path.join(rec, cj["file"])
     if not os.path.exists(src): fail(f"cuts.json의 파일 '{cj['file']}'이 촬영 폴더에 없습니다.")
     cs = sorted(cj["scenes"], key=lambda c: c["id"])
+    DENOISE = cj.get("denoise")   # {"wet": 0.8}: 마이크 없이 녹음한 노이즈를 줄인다(denoise_audio.py, DEC-042). 없으면 원본 소리
     MOCK_BADGE = cj.get("mock_badge", True)   # false면 영상의 "재현 화면" 배지를 그리지 않는다(사용자 결정, DEC-041)
     if [c["id"] for c in cs] != list(range(1, N + 1)): fail(f"cuts.json의 장면 번호가 1~{N}이 아닙니다.")
     wav = os.path.join(work, "a_all.wav"); to_wav(src, wav); db = energy_db(wav)
+    den_wav = None
+    if DENOISE:
+        den_wav = os.path.join(work, "a_denoised.wav")
+        vpy = os.path.join(HERE, "..", "..", ".harness-tmp", "asr", "venv", "bin", "python")
+        r_ = subprocess.run([vpy, os.path.join(HERE, "denoise_audio.py"), wav, den_wav, os.path.join(HERE, "..", "..", ".harness-tmp", "dn", "dpdfnet2_48khz_hr.onnx"), str(DENOISE.get("wet", 0.70))], capture_output=True, text=True)
+        if r_.returncode != 0 or not os.path.exists(den_wav): print(r_.stdout[-500:], r_.stderr[-800:]); fail("노이즈 제거에 실패했습니다. fetch_asr.sh와 fetch_denoise.sh로 도구를 설치했는지 확인하세요.", 5)
+        print("노이즈 제거:", r_.stdout.strip())
     total_src = float(probe(src)["format"]["duration"])
     st, en = [float(c["start"]) for c in cs], [float(c["end"]) for c in cs]
     cut_log = []
@@ -140,6 +148,7 @@ if os.path.exists(CUTS):
         ga = (st[i + 1] - en[i]) if i + 1 < N else total_src - en[i]
         # 앞뒤 여유는 이웃 장면과의 간격의 절반을 넘기지 않는다(붙어 있는 장면은 0). 이웃 대사 조각이 섞이지 않게 하기 위함
         c = clip_info(i + 1, src, st[i], en[i], pre=min(PRE, max(0.0, gb) / 2), post=min(POST, max(0.0, ga) / 2))
+        if den_wav: c["audio_src"] = den_wav     # 소리는 노이즈를 줄인 파일에서, 화면(얼굴)은 원본 영상에서
         c["cues_src"] = cs[i].get("cues")     # 구절 시각(촬영본 기준 초). 아래에서 장면 기준으로 바꾼다
         c["contig_prev"] = bool(i) and abs(st[i] - en[i - 1]) < 1e-6
         c["contig_next"] = i + 1 < N and abs(st[i + 1] - en[i]) < 1e-6
@@ -186,7 +195,7 @@ if not (MINLEN <= total <= MAXLEN):
     fail(f"총 길이 {total:.1f}초가 규격({MINLEN:.0f}~{MAXLEN:.0f}초)을 벗어납니다. 말을 줄이거나 쉬는 시간을 줄여 주세요.", 4)
 frames = int(round(total * FPS))
 final = dict(base, total=total, frames=frames, scenes=scenes, pip=PIP, voice="user", mode=mode, mock_badge=globals().get("MOCK_BADGE", True),
-             clips=[{k: c[k] for k in ("scene", "mode_file", "ss", "ee", "start", "len", "speech_t0", "speech_t1", "has_video", "hdr", "contig_prev", "contig_next")} for c in clips])
+             clips=[{k: c[k] for k in ("scene", "mode_file", "ss", "ee", "start", "len", "speech_t0", "speech_t1", "has_video", "hdr", "contig_prev", "contig_next")} for c in clips], denoise=globals().get("DENOISE"))
 fj = os.path.join(work, "scenes_final.json"); fs_ = os.path.join(work, "scenes_final.js")
 json.dump(final, open(fj, "w", encoding="utf-8"), ensure_ascii=False, indent=1)
 open(fs_, "w", encoding="utf-8").write("window.EP = " + json.dumps(final, ensure_ascii=False) + ";\n")
@@ -214,7 +223,7 @@ if r.returncode != 0 or len([x for x in os.listdir(frames_dir) if x.endswith(".j
 # ---------- 4) 소리 합치기 ----------
 args, filt, mixin = ["ffmpeg", "-v", "error", "-y"], [], []
 for k, c in enumerate(clips):
-    args += ["-ss", f"{c['ss']:.3f}", "-t", f"{c['len']:.3f}", "-i", c["src"]]
+    args += ["-ss", f"{c['ss']:.3f}", "-t", f"{c['len']:.3f}", "-i", c.get("audio_src", c["src"])]
     filt.append(f"[{k}:a]aresample=48000,aformat=channel_layouts=mono,highpass=f=70,adelay={int(round(c['start'] * 1000))}:all=1[a{k}]")
     mixin.append(f"[a{k}]")
 filt.append("".join(mixin) + f"amix=inputs={len(clips)}:normalize=0:dropout_transition=0,loudnorm=I=-16:TP=-1.5:LRA=11[o]")
