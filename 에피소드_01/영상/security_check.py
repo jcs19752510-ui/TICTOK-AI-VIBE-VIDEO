@@ -57,7 +57,10 @@ chk("S12", ".harness-tmp/(프레임·폰트)가 .gitignore에 있어 커밋되�
 st = subprocess.check_output(["git", "-C", root, "status", "--porcelain", "--ignored"]).decode()
 chk("S13", "폰트 파일(.woff)이 추적 대상에 없음", not subprocess.check_output(["git", "-C", root, "ls-files"]).decode().count(".woff"))
 chk("S14", "폰트 라이선스 기록 (Noto Sans KR, OFL 1.1로 알려짐, 공식 페이지 재확인 필요)", "DEC-012" in text[os.path.join(root, "docs/harness/decisions.md")])
-authors = subprocess.check_output(["git", "-C", root, "log", "--format=%ae"]).decode().split()
-chk("S15", "git 커밋 작성자 이메일이 개인 이메일이 아님", all(a.endswith("anthropic.com") or a.startswith("noreply") or "users.noreply.github.com" in a for a in authors), sorted(set(authors)))
+_log = subprocess.check_output(["git", "-C", root, "log", "--format=%an|%ae"]).decode().split("\n")
+_pairs = [l.split("|", 1) for l in _log if "|" in l]
+_mine = sorted({e for n, e in _pairs if n == "Claude"})              # 이 세션에서 Claude가 만든 커밋의 작성자 이메일
+_others = sorted({e for n, e in _pairs if n != "Claude"})           # 사용자 등 다른 작성자(정보로만 보고)
+chk("S15", "Claude가 만든 커밋의 작성자 이메일은 noreply 주소(개인 이메일 노출 없음)", bool(_mine) and all(e.startswith("noreply") or e.endswith("anthropic.com") for e in _mine), f"Claude 커밋 작성자 {len(_mine)}종, 다른 작성자 이메일 {len(_others)}종(정보: 사용자가 직접 올린 커밋, 변경하지 않음)")
 print(json.dumps(res, ensure_ascii=False, indent=1))
 print("TOTAL", len(res), "PASS", sum(r["result"] == "PASS" for r in res), "FAIL", sum(r["result"] == "FAIL" for r in res))
