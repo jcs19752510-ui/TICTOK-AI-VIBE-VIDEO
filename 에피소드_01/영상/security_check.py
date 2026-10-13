@@ -43,7 +43,12 @@ chk("S07b", "장면표 설명 열이 목업 표기(AI 대화창)와 일치: 장�
 _fin = json.load(open(sys.argv[4], encoding="utf-8")) if len(sys.argv) > 4 else {}
 _user_voice = _fin.get("voice") == "user"
 if _user_voice:
-    chk("S08", "본인 음성: '재현 화면' 배지 있음, 'AI 음성' 배지는 조건부로만 표시(본인 음성이면 숨김), 설명글에 'AI 음성(합성)' 문구 없음", html.count("재현 화면") >= 2 and "MOCK" in html and "EP.voice" in html and "AI 음성(합성)" not in text[os.path.join(vdir, "01_코딩몰라도앱만들었습니다.md")])
+    _md_s = text[os.path.join(vdir, "01_코딩몰라도앱만들었습니다.md")]
+    _desc = _md_s[_md_s.find("## D."):_md_s.find("## E.")]
+    _badge_off = _fin.get("mock_badge") is False   # 사용자 결정(DEC-041): 영상 배지를 끄면 설명글(D)의 '재현 화면' 표기가 유일한 표기이므로 반드시 있어야 한다
+    chk("S08", "본인 음성: '재현 화면' 표기(영상 배지 또는, 배지를 끈 경우 설명글 D), 'AI 음성' 배지는 조건부로만 표시(본인 음성이면 숨김), 설명글에 'AI 음성(합성)' 문구 없음",
+        html.count("재현 화면") >= 2 and "MOCK" in html and "EP.voice" in html and "AI 음성(합성)" not in _md_s and (not _badge_off or "재현 화면" in _desc),
+        f"영상 배지 {'끔(설명글 표기 확인)' if _badge_off else '표시'}")
 else:
     chk("S08", "'재현 화면'(목업 장면)과 'AI 음성'(전 장면) 배지 표기 + 설명글에 AI 음성 표기", html.count("재현 화면") >= 2 and "MOCK" in html and "AI 음성</div>" in html and "AI 음성(합성)" in text[os.path.join(vdir, "01_코딩몰라도앱만들었습니다.md")])
 _md2 = text[os.path.join(vdir, "01_코딩몰라도앱만들었습니다.md")]

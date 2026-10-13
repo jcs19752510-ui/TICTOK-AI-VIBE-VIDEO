@@ -233,6 +233,7 @@
  },
  "voice": "user",
  "mode": "C",
+ "mock_badge": false,
  "clips": [
   {
    "scene": 1,

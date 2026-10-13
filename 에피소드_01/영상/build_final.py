@@ -122,6 +122,7 @@ if os.path.exists(CUTS):
     src = os.path.join(rec, cj["file"])
     if not os.path.exists(src): fail(f"cuts.json의 파일 '{cj['file']}'이 촬영 폴더에 없습니다.")
     cs = sorted(cj["scenes"], key=lambda c: c["id"])
+    MOCK_BADGE = cj.get("mock_badge", True)   # false면 영상의 "재현 화면" 배지를 그리지 않는다(사용자 결정, DEC-041)
     if [c["id"] for c in cs] != list(range(1, N + 1)): fail(f"cuts.json의 장면 번호가 1~{N}이 아닙니다.")
     wav = os.path.join(work, "a_all.wav"); to_wav(src, wav); db = energy_db(wav)
     total_src = float(probe(src)["format"]["duration"])
@@ -184,7 +185,7 @@ total = round(cursor, 4)
 if not (MINLEN <= total <= MAXLEN):
     fail(f"총 길이 {total:.1f}초가 규격({MINLEN:.0f}~{MAXLEN:.0f}초)을 벗어납니다. 말을 줄이거나 쉬는 시간을 줄여 주세요.", 4)
 frames = int(round(total * FPS))
-final = dict(base, total=total, frames=frames, scenes=scenes, pip=PIP, voice="user", mode=mode,
+final = dict(base, total=total, frames=frames, scenes=scenes, pip=PIP, voice="user", mode=mode, mock_badge=globals().get("MOCK_BADGE", True),
              clips=[{k: c[k] for k in ("scene", "mode_file", "ss", "ee", "start", "len", "speech_t0", "speech_t1", "has_video", "hdr", "contig_prev", "contig_next")} for c in clips])
 fj = os.path.join(work, "scenes_final.json"); fs_ = os.path.join(work, "scenes_final.js")
 json.dump(final, open(fj, "w", encoding="utf-8"), ensure_ascii=False, indent=1)
