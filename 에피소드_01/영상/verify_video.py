@@ -25,11 +25,11 @@ as_ = [s for s in fmt["streams"] if s["codec_type"] == "audio"]
 v = vs[0]
 dur = float(fmt["format"]["duration"])
 chk("V01", "해상도 1080x1920 (9:16 세로)", v["width"] == 1080 and v["height"] == 1920, f'{v["width"]}x{v["height"]}')
-chk("V02", "영상 길이 63초 (±0.1초)", abs(dur - EP["total"]) <= 0.1, f"{dur:.3f}초")
+chk("V02", "영상 길이가 시간표(scenes.json)와 일치 (±0.1초)", abs(dur - EP["total"]) <= 0.1, f"{dur:.3f}초")
 num, den = map(int, v["r_frame_rate"].split("/"))
 chk("V03", "프레임레이트 30fps", num / den == 30, v["r_frame_rate"])
 nb = int(v.get("nb_frames", 0))
-chk("V04", "총 프레임 수 1890", nb == EP["frames"], nb)
+chk("V04", "총 프레임 수가 시간표(scenes.json)와 일치", nb == EP["frames"], nb)
 chk("V05", "코덱 H.264, 픽셀 포맷 yuv420p (틱톡 업로드 호환)", v["codec_name"] == "h264" and v["pix_fmt"] == "yuv420p", f'{v["codec_name"]}/{v["pix_fmt"]}')
 chk("V06", "오디오 트랙 존재 (AAC, 48kHz)", len(as_) == 1 and as_[0]["codec_name"] == "aac" and as_[0]["sample_rate"] == "48000", [(a["codec_name"], a["sample_rate"]) for a in as_])
 adur = float(as_[0]["duration"]) if as_ else -1
@@ -48,16 +48,42 @@ vol = run("ffmpeg", "-hide_banner", "-i", mp4, "-af", "volumedetect", "-vn", "-f
 mean = float(re.search(r"mean_volume: (-?[\d.]+) dB", vol).group(1)); peak = float(re.search(r"max_volume: (-?[\d.]+) dB", vol).group(1))
 chk("V18", "음성이 들어 있음: 평균 음량 −35dB 초과(무음 −91dB 아님)", mean > -35, f"평균 {mean}dB")
 chk("V19", "음량 적정: 최대 피크 −1dB 이하(클리핑 없음), 평균 −26dB 이상", peak <= -1 and mean >= -26, f"피크 {peak}dB, 평균 {mean}dB")
-sd = run("ffmpeg", "-hide_banner", "-i", mp4, "-af", "silencedetect=noise=-40dB:d=0.25", "-vn", "-f", "null", "-").stderr
-starts = [float(x) for x in re.findall(r"silence_start: ([\d.]+)", sd)]
-ends = [float(x) for x in re.findall(r"silence_end: ([\d.]+)", sd)]
-# 음성 구간 = 무음 구간 사이. 무음 끝(silence_end)이 음성 시작
-speech_starts = [0.0 if (not starts or starts[0] > 0.05) else None] + ends
-speech_starts = [s for s in speech_starts if s is not None]
-chk("V20", "음성 시작이 15장면 각각 [장면 시작, 장면 시작+0.9초] 안에 있음(싱크)", len(speech_starts) >= 15 and all(any(sc["start"] <= s <= sc["start"] + 0.9 for s in speech_starts) for sc in EP["scenes"]),
-    [(sc["id"], next((round(s, 2) for s in speech_starts if sc["start"] <= s <= sc["start"] + 0.9), None)) for sc in EP["scenes"]])
-last_end = starts[-1] if starts else dur
-chk("V21", "마지막 음성이 영상 끝 0.2초 전에 끝남(잘림 없음)", last_end <= dur - 0.2, f"마지막 음성 끝 {last_end:.2f}s / 영상 {dur:.2f}s")
+if EP.get("voice") == "user":
+    # 본인 음성(방 소음이 깔려 있어 쉼이 완전 무음이 아님): 잡음 바닥보다 12dB 큰 구간을 말소리로 본다(합성기와 같은 기준, 20ms 창, 0.25초 미만 틈은 메움)
+    import wave
+    tmpw = os.path.join(tmp if os.path.isdir(tmp) else "/tmp", "v_audio16k.wav"); os.makedirs(os.path.dirname(tmpw), exist_ok=True)
+    subprocess.check_call(["ffmpeg", "-loglevel", "error", "-y", "-i", mp4, "-vn", "-ac", "1", "-ar", "16000", tmpw])
+    _w = wave.open(tmpw); _a = np.frombuffer(_w.readframes(_w.getnframes()), dtype=np.int16).astype(np.float32) / 32768.0
+    _n = int(16000 * 0.02); _k = len(_a) // _n
+    _db = 20 * np.log10(np.sqrt(np.mean(_a[:_k * _n].reshape(_k, _n) ** 2, axis=1)) + 1e-9)
+    _thr = max(float(np.percentile(_db, 10)) + 12.0, -50.0)
+    _iv = []
+    _i = 0
+    while _i < _k:
+        if _db[_i] > _thr:
+            _j = _i
+            while _j < _k and _db[_j] > _thr: _j += 1
+            if _iv and (_i - _iv[-1][1]) * 0.02 < 0.25: _iv[-1][1] = _j
+            else: _iv.append([_i, _j])
+            _i = _j
+        else: _i += 1
+    _iv = [(a * 0.02, b * 0.02) for a, b in _iv if (b - a) * 0.02 >= 0.12]
+    speech_starts = [a for a, _ in _iv]
+    chk("V20", "음성 시작이 15장면 각각 [장면 시작, 장면 시작+0.9초] 안에 있음(싱크, 본인 음성: 잡음 바닥+12dB 기준)", all(any(sc["start"] <= x <= sc["start"] + 0.9 for x in speech_starts) for sc in EP["scenes"]),
+        [(sc["id"], next((round(x, 2) for x in speech_starts if sc["start"] <= x <= sc["start"] + 0.9), None)) for sc in EP["scenes"]])
+    last_end = _iv[-1][1] if _iv else 0.0
+    chk("V21", "마지막 음성이 영상 끝 0.2초 전에 끝남(잘림 없음, 본인 음성 기준)", bool(_iv) and last_end <= dur - 0.2, f"마지막 음성 끝 {last_end:.2f}s / 영상 {dur:.2f}s, 잡음 바닥+12dB={_thr:.1f}dB")
+else:
+    sd = run("ffmpeg", "-hide_banner", "-i", mp4, "-af", "silencedetect=noise=-40dB:d=0.25", "-vn", "-f", "null", "-").stderr
+    starts = [float(x) for x in re.findall(r"silence_start: ([\d.]+)", sd)]
+    ends = [float(x) for x in re.findall(r"silence_end: ([\d.]+)", sd)]
+    # 음성 구간 = 무음 구간 사이. 무음 끝(silence_end)이 음성 시작
+    speech_starts = [0.0 if (not starts or starts[0] > 0.05) else None] + ends
+    speech_starts = [s for s in speech_starts if s is not None]
+    chk("V20", "음성 시작이 15장면 각각 [장면 시작, 장면 시작+0.9초] 안에 있음(싱크)", len(speech_starts) >= 15 and all(any(sc["start"] <= s <= sc["start"] + 0.9 for s in speech_starts) for sc in EP["scenes"]),
+        [(sc["id"], next((round(s, 2) for s in speech_starts if sc["start"] <= s <= sc["start"] + 0.9), None)) for sc in EP["scenes"]])
+    last_end = starts[-1] if starts else dur
+    chk("V21", "마지막 음성이 영상 끝 0.2초 전에 끝남(잘림 없음)", last_end <= dur - 0.2, f"마지막 음성 끝 {last_end:.2f}s / 영상 {dur:.2f}s")
 dec = run("ffmpeg", "-v", "error", "-i", mp4, "-f", "null", "-")
 chk("V22", "ffmpeg 전체 디코딩(영상+오디오) 오류 0건", dec.returncode == 0 and dec.stderr.strip() == "", dec.stderr.strip()[:200] or "오류 없음")
 

@@ -5,6 +5,10 @@
  촬영폴더 안의 파일 이름 규칙 (확장자: mp4, mov, m4v, mp3, m4a, wav, aac):
   - 방법 A: 01 ~ 15  (장면별 파일)
   - 방법 B: 전체      (한 파일, 장면 사이 2초 쉬기). 01~15 파일이 같이 있으면 그 장면은 그 파일로 교체한다.
+  - 방법 C: cuts.json (한 파일 + 사용자가 확인한 장면별 시각표. 쉼이 짧아 자동 분할이 안 될 때, DEC-037)
+      {"file": "틱톡영상_01.mp4", "scenes": [{"id": 1, "start": 0.91, "end": 2.79}, ...,
+       {"id": 12, "start": 49.46, "end": 53.6, "snap_end": true}, ...]}
+      snap_end=true: 다음 장면과 붙어 있는 경계(쉼 없음). 추정 시각 ±0.5초 안에서 소리가 가장 작은 지점(말 사이 틈)으로 맞춘다.
  출력폴더에 만드는 것: ep01.mp4, scenes.json(최종 시간표), ep01_caption.srt, ep01_narration.srt
 
 동작
@@ -74,7 +78,22 @@ def speech_intervals(wavpath, win=0.02):
     return [(s * win, e * win) for s, e in merged if (e - s) * win >= 0.12]
 
 
-def clip_info(scene, path, ss0=None, se0=None, dur=None):
+def energy_db(wavpath, win=0.02):
+    w = wave.open(wavpath)
+    a = np.frombuffer(w.readframes(w.getnframes()), dtype=np.int16).astype(np.float32) / 32768.0
+    n = int(w.getframerate() * win); k = len(a) // n
+    return 20 * np.log10(np.sqrt(np.mean(a[:k * n].reshape(k, n) ** 2, axis=1)) + 1e-9)
+
+
+def snap_to_gap(db, t, win=0.02, span=0.5):
+    """추정 경계 t 주변 ±span초에서 소리가 가장 작은 지점(60ms 평균)을 찾는다. 말 사이 틈에 경계를 맞추기 위함."""
+    sm = np.convolve(db, np.ones(3) / 3, mode="same")
+    lo, hi = max(0, int((t - span) / win)), min(len(sm), int((t + span) / win))
+    i = lo + int(np.argmin(sm[lo:hi]))
+    return round((i + 0.5) * win, 3), float(sm[i])
+
+
+def clip_info(scene, path, ss0=None, se0=None, dur=None, pre=PRE, post=POST):
     info = probe(path)
     vs = [s for s in info["streams"] if s["codec_type"] == "video"]
     if not [s for s in info["streams"] if s["codec_type"] == "audio"]:
@@ -86,7 +105,7 @@ def clip_info(scene, path, ss0=None, se0=None, dur=None):
         if not iv: fail(f"장면 {scene:02d}: {os.path.basename(path)}에서 말소리를 찾지 못했습니다(너무 작거나 무음).")
         ss0, se0 = iv[0][0], iv[-1][1]
     hdr = bool(vs) and vs[0].get("color_transfer") in ("smpte2084", "arib-std-b67")
-    return dict(scene=scene, src=path, ss=max(0.0, ss0 - PRE), ee=min(total, se0 + POST), speech_start=ss0, speech_end=se0,
+    return dict(scene=scene, src=path, ss=max(0.0, ss0 - pre), ee=min(total, se0 + post), speech_start=ss0, speech_end=se0,
                 has_video=bool(vs), hdr=hdr, mode_file=os.path.basename(path))
 
 
@@ -96,7 +115,35 @@ for f in sorted(os.listdir(rec)):
     n, e = os.path.splitext(f)
     if e.lower() in EXT: files[n] = os.path.join(rec, f)
 clips, mode = [], None
-if "전체" in files:
+CUTS = os.path.join(rec, "cuts.json")
+if os.path.exists(CUTS):
+    mode = "C"
+    cj = json.load(open(CUTS, encoding="utf-8"))
+    src = os.path.join(rec, cj["file"])
+    if not os.path.exists(src): fail(f"cuts.json의 파일 '{cj['file']}'이 촬영 폴더에 없습니다.")
+    cs = sorted(cj["scenes"], key=lambda c: c["id"])
+    if [c["id"] for c in cs] != list(range(1, N + 1)): fail(f"cuts.json의 장면 번호가 1~{N}이 아닙니다.")
+    wav = os.path.join(work, "a_all.wav"); to_wav(src, wav); db = energy_db(wav)
+    total_src = float(probe(src)["format"]["duration"])
+    st, en = [float(c["start"]) for c in cs], [float(c["end"]) for c in cs]
+    cut_log = []
+    for i, c in enumerate(cs):
+        if c.get("snap_end") and i + 1 < N:
+            b, lvl = snap_to_gap(db, en[i]); cut_log.append((c["id"], en[i], b, round(lvl, 1)))
+            en[i] = st[i + 1] = b
+    for i in range(N):
+        if not (0 <= st[i] < en[i] <= total_src + 1e-6): fail(f"cuts.json 장면 {i + 1}: 시작·끝 시각이 올바르지 않습니다({st[i]}~{en[i]}).")
+        if i + 1 < N and en[i] > st[i + 1] + 1e-6: fail(f"cuts.json 장면 {i + 1}과 {i + 2}가 겹칩니다({en[i]} > {st[i + 1]}).")
+    for i in range(N):
+        gb = (st[i] - en[i - 1]) if i else st[i]
+        ga = (st[i + 1] - en[i]) if i + 1 < N else total_src - en[i]
+        # 앞뒤 여유는 이웃 장면과의 간격의 절반을 넘기지 않는다(붙어 있는 장면은 0). 이웃 대사 조각이 섞이지 않게 하기 위함
+        c = clip_info(i + 1, src, st[i], en[i], pre=min(PRE, max(0.0, gb) / 2), post=min(POST, max(0.0, ga) / 2))
+        c["contig_prev"] = bool(i) and abs(st[i] - en[i - 1]) < 1e-6
+        c["contig_next"] = i + 1 < N and abs(st[i + 1] - en[i]) < 1e-6
+        clips.append(c)
+    for x in cut_log: print(f"경계 맞춤: 장면 {x[0]} 끝 추정 {x[1]:.2f}s → {x[2]:.2f}s (그 지점 음량 {x[3]}dB)")
+elif "전체" in files:
     mode = "B"
     wav = os.path.join(work, "a_all.wav"); to_wav(files["전체"], wav)
     segs = []
@@ -126,6 +173,7 @@ for sc, c in zip(base["scenes"], clips):
     d = max(float(sc["duration"]), math.ceil(L * FPS) / FPS)
     scenes.append(dict(sc, start=round(cursor, 4), end=round(cursor + d, 4), duration=round(d, 4), base_duration=sc["duration"]))
     c["start"] = round(cursor, 4); c["len"] = round(L, 4)
+    c.setdefault("contig_prev", False); c.setdefault("contig_next", False)
     c["speech_t0"] = round(cursor + (c["speech_start"] - c["ss"]), 3); c["speech_t1"] = round(cursor + (c["speech_end"] - c["ss"]), 3)
     rows.append((sc["id"], sc["duration"], round(L, 2), round(d, 2)))
     cursor += d
@@ -134,7 +182,7 @@ if not (MINLEN <= total <= MAXLEN):
     fail(f"총 길이 {total:.1f}초가 규격({MINLEN:.0f}~{MAXLEN:.0f}초)을 벗어납니다. 말을 줄이거나 쉬는 시간을 줄여 주세요.", 4)
 frames = int(round(total * FPS))
 final = dict(base, total=total, frames=frames, scenes=scenes, pip=PIP, voice="user", mode=mode,
-             clips=[{k: c[k] for k in ("scene", "mode_file", "ss", "ee", "start", "len", "speech_t0", "speech_t1", "has_video", "hdr")} for c in clips])
+             clips=[{k: c[k] for k in ("scene", "mode_file", "ss", "ee", "start", "len", "speech_t0", "speech_t1", "has_video", "hdr", "contig_prev", "contig_next")} for c in clips])
 fj = os.path.join(work, "scenes_final.json"); fs_ = os.path.join(work, "scenes_final.js")
 json.dump(final, open(fj, "w", encoding="utf-8"), ensure_ascii=False, indent=1)
 open(fs_, "w", encoding="utf-8").write("window.EP = " + json.dumps(final, ensure_ascii=False) + ";\n")
@@ -192,7 +240,9 @@ if vids:
         vf.append(f"[{idx}:v]fps={FPS},setpts=PTS-STARTPTS,{hdr}crop=w=min(iw\\,ih):h=min(iw\\,ih):x=(iw-min(iw\\,ih))/2:y=(ih-min(iw\\,ih))*{FACE_Y},"
                   f"scale={D}:{D}:flags=lanczos,format=yuv420p[f{j}]")
         vf.append(f"[f{j}][r{j}]overlay=0:0:format=auto,format=yuva420p[g{j}]")
-        vf.append(f"[g{j}][m{j}]alphamerge,fade=t=in:st=0:d=0.12:alpha=1,fade=t=out:st={max(0.0, L - 0.12):.3f}:d=0.12:alpha=1,setpts=PTS+{T:.3f}/TB[p{j}]")
+        fin = "" if c["contig_prev"] else ",fade=t=in:st=0:d=0.12:alpha=1"           # 붙어 있는 장면 경계에서는 얼굴이 깜빡이지 않게 페이드를 넣지 않는다
+        fout = "" if c["contig_next"] else f",fade=t=out:st={max(0.0, L - 0.12):.3f}:d=0.12:alpha=1"
+        vf.append(f"[g{j}][m{j}]alphamerge{fin}{fout},setpts=PTS+{T:.3f}/TB[p{j}]")
         vf.append(f"{last}[p{j}]overlay=x={PIP['x']}:y={PIP['y']}:eof_action=pass:enable='between(t,{T:.3f},{T + L:.3f})'[v{j}]")
         last = f"[v{j}]"
     vf.append(f"{last}format=yuv420p[vout]")
