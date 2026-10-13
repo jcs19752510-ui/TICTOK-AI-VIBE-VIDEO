@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """녹음 스크립트 생성: scenes.json의 나레이션을 그대로 뽑아 사용자가 폰으로 녹음할 대본 문서를 만든다.
 대사는 영상 자막·합성 스크립트와 같은 원본(scenes.json)에서 나오므로 어긋나지 않는다.
-사용: python3 -I make_recording_script.py <영상폴더> <출력.md>
+사용: python3 -I make_recording_script.py <영상폴더> <출력.md> [대사만_출력.md]
 """
 import json, os, re, sys
 
@@ -78,4 +78,10 @@ L.append("4. 영상 검수·보안 점검(녹음에 개인정보나 잡음이 �
 L.append("5. 업로드 전 **직접 들어보시고**, 틱톡의 \"AI 생성 콘텐츠\" 라벨 설정을 앱에서 확인해 주세요(업로드는 사용자가 합니다).\n")
 L.append(f"---\n전체 대사 약 {tot}음절 · 장면 15개 · 영상 {EP['total']}초\n")
 open(out, "w", encoding="utf-8").write("\n".join(L))
+if len(sys.argv) > 3:  # 설명 없이 읽을 대사만 모은 파일
+    M = ["# 녹음 대사 — 에피소드 1/30\n", "읽는 순서대로 15개입니다. 번호는 파일 이름과 같습니다(1번 → `01.mp3`).\n"]
+    for sc in EP["scenes"]:
+        M.append(f"## {sc['id']}\n")
+        M.append(f"**{sc['narration']}**\n")
+    open(sys.argv[3], "w", encoding="utf-8").write("\n".join(M))
 print("OK", len(EP["scenes"]), "장면", tot, "음절")
