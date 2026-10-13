@@ -27,6 +27,9 @@ async function openPage(browser, query) {
     let jobs = [];
     if (mode === "sample") {
       EP.scenes.forEach((s) => { [0.3, s.duration - 0.2].forEach((o, k) => jobs.push({ name: `s${String(s.id).padStart(2, "0")}_${k}`, t: s.start + Math.max(0.05, o) })); });
+    } else if (mode.startsWith("range:")) {
+      const [a, b] = mode.slice(6).split("-").map(Number);
+      for (let f = a; f <= b; f++) jobs.push({ name: `f${String(f).padStart(5, "0")}`, t: f / EP.fps });
     } else {
       for (let f = 0; f < EP.frames; f++) jobs.push({ name: `f${String(f).padStart(5, "0")}`, t: f / EP.fps });
     }

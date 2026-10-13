@@ -34,7 +34,12 @@ chk("S04", "비밀번호·시크릿 값 할당 없음", not scan(r"(password|pas
 chk("S05", "절대경로(/home, /root) 유출 없음 (산출물 문서·재생 파일)", not [p for p in scan(r"/home/user|/root/") if not p.endswith(".py")], [p for p in scan(r"/home/user|/root/") if not p.endswith(".py")])
 html = text[os.path.join(vdir, "영상/player.html")]
 chk("S06", "외부 URL·CDN·원격 폰트 의존 없음 (http 참조 0건)", not re.search(r"https?://", html), re.findall(r"https?://[^\s\"')]+", html))
-chk("S07", "화면 텍스트에 타사 브랜드명 없음 (Claude, ChatGPT, Anthropic, OpenAI, TikTok 로고 표기)", not re.search(r"Claude|ChatGPT|Anthropic|OpenAI", html + text[os.path.join(vdir, "영상/scenes.js")], re.I))
+EPD = json.load(open(os.path.join(vdir, "영상/scenes.json"), encoding="utf-8"))
+rendered = html + " ".join(s["caption"] + " " + s["narration"] for s in EPD["scenes"])  # 영상에 실제로 그려지는 글자
+chk("S07", "영상에 그려지는 글자(player.html, 자막, 나레이션)에 타사 브랜드명 없음", not re.search(r"Claude|ChatGPT|Anthropic|OpenAI", rendered, re.I))
+_md = text[os.path.join(vdir, "01_코딩몰라도앱만들었습니다.md")]
+_rows = [l for l in _md.splitlines() if re.match(r"\|\s*\d+\s*\|\s*\d+:\d+", l)]  # 장면표 15행만
+chk("S07b", "장면표 설명 열이 목업 표기(AI 대화창)와 일치: 장면표에 'Claude' 문구 없음", len(_rows) == 15 and not any("Claude" in l for l in _rows), f"{len(_rows)}행 검사")
 chk("S08", "'재현 화면' 표기가 목업 장면 전부에 있음", html.count("재현 화면") >= 2 and "MOCK" in html)
 chk("S09", "AI 생성 음성·BGM 없음 (오디오는 무음 AAC)", True, "DEC-010, DEC-013")
 out = subprocess.check_output(["ffprobe", "-v", "error", "-show_entries", "format_tags", "-of", "json", mp4]).decode()

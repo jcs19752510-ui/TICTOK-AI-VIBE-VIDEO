@@ -82,7 +82,11 @@ chk("T21", "보안 한 줄 (개인정보·비밀번호·API 키) 대본과 템�
 chk("T22", "화면 입력 프롬프트 예시 포함", "프롬프트 예시 ①" in t and "프롬프트 예시 ②" in t and "예시 ①" in t and "예시 ②" in t)
 
 # verify unknowns flagged
-chk("T23", "불확실 정보에 '확인 필요' 표기 (메뉴명·요금제·분류)", t.count("확인 필요") >= 5, f"{t.count('확인 필요')}회")
+_need = {"메뉴명": None, "요금제": None, "해시태그": None, "BGM": None}
+_lines = t.splitlines()
+for k in _need:
+    _need[k] = any(k in l and "확인 필요" in l for l in _lines)
+chk("T23", "불확실 정보 4종(메뉴명·요금제·해시태그 분류·BGM) 각각 같은 줄에 '확인 필요' 표기", all(_need.values()), str(_need))
 
 # no invented prices / model names
 chk("T24", "가격·요금 수치·특정 모델명 지어내지 않음", not re.search(r"\d+\s*(원|달러|\$)", t) and not re.search(r"(Opus|Sonnet|Haiku|GPT-?\d)", t))

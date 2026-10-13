@@ -89,8 +89,7 @@ function codeBars(n) {
 }
 function chatWin(o) {
   var x = 60, y = 210, w = 960, h = 780, body = "";
-  var clamp2 = o.bars ? ";display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden" : "";
-  if (o.user) body += '<div style="margin:0 0 22px auto;max-width:780px;width:fit-content;background:#1f5f58;border-radius:28px;padding:20px 26px;font-size:31px;line-height:1.45' + clamp2 + '">' + esc(o.user) + "</div>";
+  if (o.user) body += '<div style="margin:0 0 22px auto;max-width:780px;width:fit-content;background:#1f5f58;border-radius:28px;padding:20px 26px;font-size:31px;line-height:1.45">' + (o.bars ? '<div style="max-height:90px;overflow:hidden">' + esc(o.user) + "</div>" : esc(o.user)) + "</div>";
   if (o.ai) body += '<div style="max-width:800px;width:fit-content;background:#1d2e37;border-radius:28px;padding:20px 26px;font-size:31px;line-height:1.45">' + esc(o.ai) + (o.bars ? '<div style="margin-top:8px">' + codeBars(o.bars) + "</div>" : "") + "</div>";
   var caret = Math.floor((o.lt || 0) * 2) % 2 === 0 ? '<span style="display:inline-block;width:4px;height:36px;background:#38c9bb;vertical-align:middle;margin-left:4px"></span>' : "";
   var input = o.typed ? esc(o.typed) + caret : '<span style="color:#7e95a0">' + esc(o.placeholder === undefined ? "여기에 말로 적어요" : o.placeholder) + "</span>" + (o.caret ? caret : "");
