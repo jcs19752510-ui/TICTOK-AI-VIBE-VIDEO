@@ -58,7 +58,7 @@ chk("T13", "과장 표현 금지어 없음", not hit, f"발견 {hit}")
 
 # hook: exactly one pattern
 hook = rows[0]
-chk("T14", "후킹 패턴 1개(결과 선공개형): 완성 화면 + '코딩 하나도 모르고 만들었습니다'", "완성" in hook["screen"] and "코딩 하나도 모르고 만들었습니다" in hook["cap"] and "아직도" not in hook["nar"] and "망합니다" not in hook["nar"])
+chk("T14", "후킹 패턴 1개(결과 선공개형): 완성 화면 + '코딩 몰라도 이런 앱 만들 수 있어요'", "완성" in hook["screen"] and "코딩 몰라도 이런 앱 만들 수 있어요" in hook["cap"] and "아직도" not in hook["nar"] and "망합니다" not in hook["nar"])
 
 # 3 steps
 joined = " ".join(r["nar"] for r in rows)

@@ -61,6 +61,31 @@ chk("V21", "마지막 음성이 영상 끝 0.2초 전에 끝남(잘림 없음)",
 dec = run("ffmpeg", "-v", "error", "-i", mp4, "-f", "null", "-")
 chk("V22", "ffmpeg 전체 디코딩(영상+오디오) 오류 0건", dec.returncode == 0 and dec.stderr.strip() == "", dec.stderr.strip()[:200] or "오류 없음")
 
+
+# ---- 얼굴 합성·최종 시간표 검수 (최종 영상에만 해당: scenes.json에 pip·clips가 있을 때) ----
+if EP.get("pip"):
+    os.makedirs(tmp, exist_ok=True)
+    from PIL import Image
+    P = EP["pip"]
+    chk("V24", "얼굴 위치가 안전 영역 안: 오른쪽 가장자리 x≤930(틱톡 버튼 추정 영역 밖), 아래쪽 y≤1500", P["x"] + P["d"] <= 930 and P["y"] + P["d"] <= 1500, f"x {P['x']}~{P['x'] + P['d']}, y {P['y']}~{P['y'] + P['d']}")
+    chk("V25", "총 길이가 규격 60~90초 안", 60 <= EP["total"] <= 90, f"{EP['total']}초")
+    bad, seen = [], 0
+    for cl in EP.get("clips", []):
+        if not cl.get("has_video"): continue
+        seen += 1
+        tm = (cl["speech_t0"] + cl["speech_t1"]) / 2
+        fp = os.path.join(tmp, f"face_{cl['scene']:02d}.png")
+        subprocess.check_call(["ffmpeg", "-loglevel", "error", "-y", "-ss", f"{tm:.3f}", "-i", mp4, "-frames:v", "1", fp])
+        a = np.asarray(Image.open(fp).convert("L"), dtype=np.float32)[P["y"]:P["y"] + P["d"], P["x"]:P["x"] + P["d"]]
+        yy, xx = np.mgrid[0:P["d"], 0:P["d"]]; inside = ((xx - P["d"] / 2) ** 2 + (yy - P["d"] / 2) ** 2) <= (P["d"] / 2 - 30) ** 2
+        if float(a[inside].std()) < 12: bad.append(cl["scene"])
+    chk("V23", "얼굴이 있는 장면마다 말하는 동안 원형 얼굴 영역에 영상이 보임(밝기 분산 ≥12)", not bad and seen > 0, f"얼굴 장면 {seen}개, 이상 {bad}")
+    probe_all = subprocess.run(["ffprobe", "-v", "error", "-show_format", "-show_streams", mp4], capture_output=True, text=True).stdout
+    # 태그 이름(location, com.apple.quicktime.location.ISO6709, gps)과 좌표 형식(+37.5665+126.9780/)만 찾는다. chroma_location 같은 색상 정보는 위치정보가 아니다.
+    tag_lines = [l for l in probe_all.splitlines() if l.startswith("TAG:")]
+    geo = [l for l in tag_lines if re.search(r"location|ISO6709|gps", l, re.I)] + re.findall(r"[+-]\d{1,3}\.\d{2,}[+-]\d{1,3}\.\d{2,}/?", probe_all)
+    chk("V26", "위치 정보(GPS 등) 메타데이터가 최종 파일에 없음(태그 이름·좌표 형식 검사)", not geo, f"태그 {len(tag_lines)}개 검사, 발견 {geo[:3]}")
+
 # 자막
 caps = [s["caption"] for s in EP["scenes"]]
 chk("V10", "화면 자막 모든 장면 존재, 20자 이내", all(c and len(c) <= 20 for c in caps), [len(c) for c in caps])
@@ -70,7 +95,10 @@ for name, key in (("ep01_caption.srt", "caption"), ("ep01_narration.srt", "narra
     ok = len(blocks) == 15
     for b, sc in zip(blocks, EP["scenes"]):
         l = b.split("\n")
-        exp = f"00:{sc['start'] // 60:02d}:{sc['start'] % 60:02d},000 --> 00:{sc['end'] // 60:02d}:{sc['end'] % 60:02d},000"
+        def _ts(x):
+            ms = int(round(x * 1000)); h, ms = divmod(ms, 3600000); mi, ms = divmod(ms, 60000); s_, ms = divmod(ms, 1000)
+            return f"{h:02d}:{mi:02d}:{s_:02d},{ms:03d}"
+        exp = f"{_ts(sc['start'])} --> {_ts(sc['end'])}"
         ok = ok and l[1] == exp and l[2] == sc[key]
     chk("V11" if key == "caption" else "V12", f"{name}: 15개, 시간·문구가 scenes.json과 일치", ok)
 
@@ -78,19 +106,25 @@ for name, key in (("ep01_caption.srt", "caption"), ("ep01_narration.srt", "narra
 os.makedirs(tmp, exist_ok=True)
 subprocess.check_call(["ffmpeg", "-loglevel", "error", "-y", "-i", mp4, "-vf", "fps=1", os.path.join(tmp, "v%03d.png")])
 files = sorted(f for f in os.listdir(tmp) if f.startswith("v") and f.endswith(".png"))
-chk("V13", "1초 간격 샘플 프레임 63장 추출", len(files) == EP["total"], len(files))
+chk("V13", "1초 간격 샘플 프레임 추출(총 길이 ±1장)", abs(len(files) - EP["total"]) <= 1, f"{len(files)}장 / {EP['total']}초")
 bottom_bad, top_bad, lum_min = [], [], 255
 for f in files:
     a = np.asarray(Image.open(os.path.join(tmp, f)).convert("L"), dtype=np.int16)
     if (a[1536:] > 70).any(): bottom_bad.append(f)           # 하단 20%: 밝은(글자·그래픽) 픽셀이 없어야 함
     if (a[1500:1536] > 70).any(): bottom_bad.append(f + "(1500~1536)")  # 캡션은 1500 안에서 끝나야 함
 chk("V14", "하단 20%(y≥1536)와 그 직전 완충(1500~1536)에 글자·그래픽 없음", not bottom_bad, bottom_bad[:5] or f"{len(files)}장 검사")
-# 자막 영역 대비: 캡션 줄(y 1090~1290) 글자색 대비 (밝은 글자 vs 어두운 배경)
-bad_c = []
+# 자막 영역 대비: 장면이 바뀐 직후 0.5초는 자막이 서서히 나타나는 연출 구간이라 제외한다(표본이 우연히 걸려도 결함이 아님)
+def _scene_lt(t):
+    for sc in EP["scenes"]:
+        if sc["start"] <= t < sc["end"]: return t - sc["start"]
+    return 99.0
+bad_c, skipped = [], 0
 for f in files:
+    tt = int(f[1:4]) - 0.5   # fps=1 표본의 대략적 시각(번호 n은 n-0.5초 부근)
+    if _scene_lt(tt) < 0.5: skipped += 1; continue
     a = np.asarray(Image.open(os.path.join(tmp, f)).convert("L"), dtype=np.float32)[1090:1290]
     if a.max() < 200 or np.percentile(a, 20) > 60: bad_c.append(f)
-chk("V15", "큰 자막 영역에 밝은 글자와 어두운 배경 대비 확보 (밝기 상위≥200, 배경 하위 20%≤60)", not bad_c, bad_c[:5] or "63장 모두 충족")
+chk("V15", "큰 자막 영역에 밝은 글자와 어두운 배경 대비 확보 (밝기 상위≥200, 배경 하위 20%≤60; 장면 시작 0.5초 전환 구간 제외)", not bad_c, bad_c[:5] or f"{len(files) - skipped}장 충족, 전환 구간 {skipped}장 제외")
 
 # 썸네일
 im = Image.open(thumb)

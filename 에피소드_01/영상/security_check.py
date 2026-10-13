@@ -40,7 +40,12 @@ chk("S07", "영상에 그려지는 글자(player.html, 자막, 나레이션)에 
 _md = text[os.path.join(vdir, "01_코딩몰라도앱만들었습니다.md")]
 _rows = [l for l in _md.splitlines() if re.match(r"\|\s*\d+\s*\|\s*\d+:\d+", l)]  # 장면표 15행만
 chk("S07b", "장면표 설명 열이 목업 표기(AI 대화창)와 일치: 장면표에 'Claude' 문구 없음", len(_rows) == 15 and not any("Claude" in l for l in _rows), f"{len(_rows)}행 검사")
-chk("S08", "'재현 화면'(목업 장면)과 'AI 음성'(전 장면) 배지 표기 + 설명글에 AI 음성 표기", html.count("재현 화면") >= 2 and "MOCK" in html and "AI 음성</div>" in html and "AI 음성(합성)" in text[os.path.join(vdir, "01_코딩몰라도앱만들었습니다.md")])
+_fin = json.load(open(sys.argv[4], encoding="utf-8")) if len(sys.argv) > 4 else {}
+_user_voice = _fin.get("voice") == "user"
+if _user_voice:
+    chk("S08", "본인 음성: '재현 화면' 배지 있음, 'AI 음성' 배지는 조건부로만 표시(본인 음성이면 숨김), 설명글에 'AI 음성(합성)' 문구 없음", html.count("재현 화면") >= 2 and "MOCK" in html and "EP.voice" in html and "AI 음성(합성)" not in text[os.path.join(vdir, "01_코딩몰라도앱만들었습니다.md")])
+else:
+    chk("S08", "'재현 화면'(목업 장면)과 'AI 음성'(전 장면) 배지 표기 + 설명글에 AI 음성 표기", html.count("재현 화면") >= 2 and "MOCK" in html and "AI 음성</div>" in html and "AI 음성(합성)" in text[os.path.join(vdir, "01_코딩몰라도앱만들었습니다.md")])
 _md2 = text[os.path.join(vdir, "01_코딩몰라도앱만들었습니다.md")]
 chk("S09", "배경음악 미사용(문서에 BGM 언급 없음) + 음성은 AI 음성으로 DEC-017에 기록", "BGM" not in _md2 and "DEC-017" in text[os.path.join(root, "docs/harness/decisions.md")], "DEC-016, DEC-017")
 out = subprocess.check_output(["ffprobe", "-v", "error", "-show_entries", "format_tags", "-of", "json", mp4]).decode()

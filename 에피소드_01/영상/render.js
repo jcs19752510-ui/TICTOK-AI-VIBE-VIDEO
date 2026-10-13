@@ -5,14 +5,15 @@ const fs = require("fs");
 const { chromium } = require("playwright");
 
 const mode = process.argv[2], out = process.argv[3], workers = parseInt(process.argv[4] || "4", 10);
-const EP = JSON.parse(fs.readFileSync(path.join(__dirname, "scenes.json"), "utf8"));
+const EP = JSON.parse(fs.readFileSync(process.env.SCENES_JSON || path.join(__dirname, "scenes.json"), "utf8"));
+const sq = process.env.SCENES_JS ? "scenes=" + encodeURIComponent("file://" + process.env.SCENES_JS) : "";
 const url = "file://" + path.join(__dirname, "player.html");
 fs.mkdirSync(out, { recursive: true });
 
 async function openPage(browser, query) {
   const ctx = await browser.newContext({ viewport: { width: 1080, height: 1920 }, deviceScaleFactor: 1 });
   const page = await ctx.newPage();
-  await page.goto(url + (query || ""));
+  await page.goto(url + (query || sq ? "?" + [query, sq].filter(Boolean).join("&") : ""));
   await page.evaluate(() => window.fontsReady);
   return page;
 }
@@ -21,7 +22,7 @@ async function openPage(browser, query) {
   const browser = await chromium.launch({ executablePath: process.env.CHROME_PATH || undefined });
   const t0 = Date.now();
   if (mode === "thumb") {
-    const page = await openPage(browser, "?thumb=1");
+    const page = await openPage(browser, "thumb=1");
     await page.screenshot({ path: path.join(out, "thumbnail.png"), type: "png" });
   } else {
     let jobs = [];
