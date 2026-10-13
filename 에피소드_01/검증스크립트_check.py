@@ -49,7 +49,7 @@ chk("T10", "미치환 변수 {{ }} / [[ ]] 없음", "{{" not in t and "[[" not i
 
 # CTA keyword
 chk("T11", "CTA에 댓글 키워드 '앱만들기' 포함 (나레이션·자막)", "앱만들기" in rows[-2]["nar"] and "앱만들기" in rows[-2]["cap"])
-chk("T12", "CTA 문구 '프롬프트 템플릿 드려요' 포함", "프롬프트 템플릿 드려요" in rows[-2]["nar"])
+chk("T12", "CTA 문구 '프롬프트 템플릿을 드리겠습니다' 포함", "프롬프트 템플릿을 드리겠습니다" in rows[-2]["nar"])
 
 # forbidden words (deliverable body only)
 forb = ["무조건", "100%", "누구나", "1분 만에", "완벽", "반드시 성공", "무료로 누구"]
