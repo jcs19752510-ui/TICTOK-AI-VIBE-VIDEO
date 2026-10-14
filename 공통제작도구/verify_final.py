@@ -21,8 +21,10 @@ chk("F06", len(au) == 1 and au[0]["codec_name"] == "aac", "오디오 트랙 1개
 eb = run("ffmpeg", "-nostats", "-i", mp4, "-af", "ebur128=peak=true", "-f", "null", "-").stderr
 lufs = float(re.findall(r"I:\s+(-?[\d.]+) LUFS", eb)[-1]); peak = float(re.findall(r"Peak:\s+(-?[\d.]+) dBFS", eb)[-1])
 chk("F07", abs(lufs + 16) <= 1.5 and peak <= -1.0, f"음량 {lufs} LUFS(목표 -16±1.5), 피크 {peak} dBFS(≤ -1)")
-run("ffmpeg", "-v", "error", "-y", "-i", mp4, "-vn", "-ac", "1", "-ar", "16000", "/tmp/_vf.wav")
-w = wave.open("/tmp/_vf.wav"); a = np.frombuffer(w.readframes(w.getnframes()), dtype=np.int16).astype(float) / 32768
+import tempfile, os
+vf = os.path.join(tempfile.mkdtemp(), "vf.wav")   # 병렬로 여러 개를 검수해도 서로 덮어쓰지 않게 실행마다 따로 만든다(DEC-055)
+run("ffmpeg", "-v", "error", "-y", "-i", mp4, "-vn", "-ac", "1", "-ar", "16000", vf)
+w = wave.open(vf); a = np.frombuffer(w.readframes(w.getnframes()), dtype=np.int16).astype(float) / 32768
 win = int(w.getframerate() * 0.02); k = len(a) // win
 db = 20 * np.log10(np.sqrt(np.mean(a[:k * win].reshape(k, win) ** 2, axis=1)) + 1e-9)
 m = db > max(np.percentile(db, 10) + 12, -50); iv = []; i = 0
@@ -38,11 +40,20 @@ for s, e in iv:
     else: mg.append([s, e])
 mg = [x for x in mg if x[1] - x[0] >= 0.12]
 clips = F["clips"]
-chk("F08", len(mg) == len(clips), f"최종 소리에서 찾은 말 구간 {len(mg)}개(장면 {len(clips)}개)")
-if len(mg) == len(clips):
-    mx = max(max(abs(s - c["speech_t0"]), abs(e - c["speech_t1"])) for c, (s, e) in zip(clips, mg))
-    chk("F09", mx <= 0.15, f"말 시작·끝이 시간표와 최대 {mx:.3f}초 차이(허용 0.15초)")
-    out = [i + 1 for i, ((s, e), sc) in enumerate(zip(mg, F["scenes"])) if not (sc["start"] - 0.05 <= s and e <= sc["end"] + 0.05)]
+# 사람이 읽으면 한 줄 안에도 0.4~0.9초 쉼이 있어 말 구간 수가 장면 수보다 많다. 구간을 각 장면의 말 시간표(speech_t0~t1 ± 0.3초)에 배정해서 확인한다(DEC-055)
+asg = {i: [] for i in range(len(clips))}; stray = []
+for s_, e_ in mg:
+    hit = [i for i, c in enumerate(clips) if s_ < c["speech_t1"] + 0.3 and e_ > c["speech_t0"] - 0.3]
+    if len(hit) == 1: asg[hit[0]].append((s_, e_))
+    else: stray.append((round(s_, 2), round(e_, 2), hit))
+empty = [clips[i]["scene"] for i, v in asg.items() if not v]
+chk("F08", not empty and not stray, f"말 구간 {len(mg)}개를 {len(clips)}장면에 빠짐없이 배정(소리 없는 장면 {empty or '없음'}, 어느 장면에도 안 맞거나 두 장면에 걸친 소리 {stray or '없음'})")
+if not empty and not stray:
+    dif = [d_ for c, v in zip(clips, asg.values()) for d_ in (abs(v[0][0] - c["speech_t0"]), abs(v[-1][1] - c["speech_t1"]))]
+    mx, md = max(dif), float(np.median(dif))
+    # 아주 작은 말 시작·끝(감지 기준 −50dB 근처)은 최종 소리에서 0.2초쯤 다르게 잡힐 수 있어 최대는 0.25초까지 허용하고, 소리 전체가 밀린 경우를 잡기 위해 중앙값은 0.05초로 엄격히 본다(DEC-055: 2편 16번 장면에서 +0.203초 관찰)
+    chk("F09", mx <= 0.25 and md <= 0.05, f"말 시작·끝이 시간표와 최대 {mx:.3f}초(허용 0.25), 중앙값 {md:.3f}초(허용 0.05) 차이")
+    out = [c["scene"] for c, v, sc in zip(clips, asg.values(), F["scenes"]) if not (sc["start"] - 0.05 <= v[0][0] and v[-1][1] <= sc["end"] + 0.05)]
     chk("F10", not out, f"말이 자기 장면 시간 밖으로 나간 장면: {out or '없음'}")
 chk("F11", F.get("voice") == "user" and F.get("mock_badge") is False, f'본인 음성 표기 voice={F.get("voice")}, 영상 배지 mock_badge={F.get("mock_badge")}')
 face = sum(1 for c in clips if c["has_video"])

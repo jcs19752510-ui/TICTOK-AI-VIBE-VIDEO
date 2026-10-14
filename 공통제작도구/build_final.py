@@ -4,11 +4,12 @@
 사용: python3 -I build_final.py <에피소드폴더> <촬영폴더> <작업폴더> <출력폴더>   (공통제작도구판: 2~30편용, 장면 수는 영상/scenes.json에서 읽는다)
  촬영폴더 안의 파일 이름 규칙 (확장자: mp4, mov, m4v, mp3, m4a, wav, aac):
   - 방법 A: 01 ~ 15  (장면별 파일)
-  - 방법 B: 전체      (한 파일, 장면 사이 2초 쉬기). 01~15 파일이 같이 있으면 그 장면은 그 파일로 교체한다.
+  - 방법 B: 전체      (한 파일, 장면 사이 2초 쉬기). 01~15 파일이 같이 있으면 그 장면은 그 파일로 교체한다. 맨 앞·뒤의 0.5초 미만 소리 하나는 무시한다(녹화 버튼 조작음).
   - 방법 C: cuts.json (한 파일 + 사용자가 확인한 장면별 시각표. 쉼이 짧아 자동 분할이 안 될 때, DEC-037)
       {"file": "틱톡영상_01.mp4", "scenes": [{"id": 1, "start": 0.91, "end": 2.79}, ...,
        {"id": 12, "start": 49.46, "end": 53.6, "snap_end": true}, ...]}
       snap_end=true: 다음 장면과 붙어 있는 경계(쉼 없음). 추정 시각 ±0.5초 안에서 소리가 가장 작은 지점(말 사이 틈)으로 맞춘다.
+ 환경 변수 PLAYER_DIR: 공통 플레이어 대신 쓸 폴더(render.js·player.html가 있는 곳). 2편은 PLAYER_DIR=에피소드_02/영상
  출력폴더에 만드는 것: epNN.mp4, scenes.json(최종 시간표), epNN_caption.srt, epNN_narration.srt (NN은 에피소드 폴더 번호)
 
 동작
@@ -165,6 +166,12 @@ elif "전체" in files:
     for s, e in speech_intervals(wav):
         if segs and s - segs[-1][1] < GAP_B: segs[-1][1] = e
         else: segs.append([s, e])
+    # 녹화 시작·종료 버튼 조작음처럼 맨 앞이나 맨 뒤에 있는 0.5초 미만의 짧은 소리 하나는 장면으로 세지 않는다(장면이 정확히 하나 많을 때만, DEC-055)
+    if len(segs) == N + 1:
+        for edge in (-1, 0):
+            if segs[edge][1] - segs[edge][0] < 0.5:
+                print(f"안내: 맨 {'뒤' if edge == -1 else '앞'}의 짧은 소리({segs[edge][0]:.2f}~{segs[edge][1]:.2f}초, {segs[edge][1] - segs[edge][0]:.2f}초)는 장면으로 세지 않습니다.")
+                segs.pop(edge); break
     over = {i for i in range(1, N + 1) if f"{i:02d}" in files}
     if len(segs) != N and len(over) != N:
         fail(f"'전체' 파일에서 장면 {len(segs)}개를 찾았습니다(기대 {N}개). 장면 사이를 2초 이상 쉬었는지 확인해 주세요. 찾은 구간(초): " +
@@ -220,7 +227,8 @@ for r in rows: print(f"  장면 {r[0]:2d}: {r[1]}s / {r[2]}s / {r[3]}s" + ("  �
 # ---------- 3) 화면(프레임) 그리기 ----------
 frames_dir = os.path.join(work, "frames"); os.makedirs(frames_dir, exist_ok=True)
 env = dict(os.environ, NODE_PATH=NODE_PATH, CHROME_PATH=CHROME, SCENES_JSON=fj, SCENES_JS=fs_)
-r = subprocess.run(["node", os.path.join(HERE, "render.js"), "full", frames_dir, "6"], env=env, capture_output=True, text=True)
+PLAYER_DIR = os.path.abspath(os.environ.get("PLAYER_DIR", HERE))   # 2편처럼 자체 render.js·player.html(1편 방식)을 쓰는 에피소드는 PLAYER_DIR=에피소드_NN/영상 (DEC-055)
+r = subprocess.run(["node", os.path.join(PLAYER_DIR, "render.js"), "full", frames_dir, "6"], env=env, capture_output=True, text=True)
 if r.returncode != 0 or len([x for x in os.listdir(frames_dir) if x.endswith(".jpg")]) != frames:
     print(r.stdout[-500:], r.stderr[-1500:]); fail(f"프레임 {frames}장을 만들지 못했습니다.", 5)
 
