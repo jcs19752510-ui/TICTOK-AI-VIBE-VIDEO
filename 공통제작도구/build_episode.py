@@ -91,7 +91,7 @@ md = os.path.join(folder, f"{NN}_{S['slug']}.md")
 open(md, "w", encoding="utf-8").write("\n".join(L) + "\n")
 out = os.path.join(folder, "영상"); os.makedirs(out, exist_ok=True)
 data = dict(width=1080, height=1920, fps=30, total=total, frames=total * 30, series=f"{EPN}/30", channel="AI바이브생활팁",
-            handle="@ai_vibe_life_tip", voice="user", mock_badge=False, thumb=S["thumb"].get("v") and dict(l1=S["thumb"]["l1"], l2=S["thumb"]["l2"], v=S["thumb"]["v"]),
+            handle="@ai_vibe_life_tip", voice="user", mock_badge=False, thumb=dict(l1=S["thumb"]["l1"], l2=S["thumb"]["l2"], v=S["thumb"].get("v")),
             scenes=[dict(id=s["id"], start=s["start"], end=s["end"], duration=s["d"], screen=s["screen"], narration=s["narr"], caption=s["cap"], fx=s["fx"], v=s["v"]) for s in sc])
 json.dump(data, open(os.path.join(out, "scenes.json"), "w", encoding="utf-8"), ensure_ascii=False, indent=1)
 open(os.path.join(out, "scenes.js"), "w", encoding="utf-8").write("window.EP = " + json.dumps(data, ensure_ascii=False) + ";\n")

@@ -9,7 +9,11 @@
  "handle": "@ai_vibe_life_tip",
  "voice": "user",
  "mock_badge": false,
- "thumb": null,
+ "thumb": {
+  "l1": "역할 주면",
+  "l2": "답이 달라질까?",
+  "v": null
+ },
  "scenes": [
   {
    "id": 1,

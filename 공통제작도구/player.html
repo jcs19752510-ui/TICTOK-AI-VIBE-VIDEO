@@ -256,7 +256,7 @@ window.renderThumb = function () {
   document.getElementById("stage").innerHTML =
     box(0, 0, 1080, 1920, "background:linear-gradient(180deg,#123038,#0b1419 70%)") +
     box(60, 150, 960, 400, "font-size:140px;font-weight:900;line-height:1.1;text-align:left", esc(T.l1 || "") + '<br><span style="color:#38c9bb">' + esc(T.l2 || "") + "</span>") +
-    (T.v ? '<div style="position:absolute;left:0;top:0;width:1080px;height:1920px">' + visual(T.v, 3, 5) + "</div>" : "") +
+    (T.v ? '<div style="position:absolute;left:0;top:0;width:1080px;height:1920px">' + visual(T.v, 3, 5) + "</div>" : box(290, 720, 500, 500, "border-radius:50%;background:radial-gradient(circle at 35% 30%,#6fe3d6,#1aa598 70%);box-shadow:0 30px 80px rgba(0,0,0,.45);text-align:center;line-height:500px;font-size:200px;font-weight:900", "AI")) +
     '<div class="chip" style="left:60px;top:70px;padding:12px 28px;font-size:34px;background:#16232b;border:3px solid #2f4651">' + EP.channel + " · " + EP.series + "</div>";
 };
 window.fontsReady = Promise.all([document.fonts.load("900 40px NK", "가"), document.fonts.load("500 40px NK", "가")]).then(function () { return document.fonts.ready; });
