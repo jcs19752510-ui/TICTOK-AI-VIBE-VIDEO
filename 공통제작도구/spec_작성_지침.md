@@ -24,7 +24,9 @@
 - ba(`panel`) 한쪽 `lines` 최대 5줄, 줄당 ≤ 18자. `h` ≤ 8자.
 - app `banner` ≤ 40자, `items` 최대 4개, `tag` ≤ 14자. 앱 옵션: `dateCol`, `accent`(색상 코드), `bg`, `fs`(글자 배율, 예 1.3), `dark`. 항목: `t`, `due`, `late`, `done`.
 - pills 항목 `t` ≤ 14자, 최대 3개. cards 3개, 제목 ≤ 6자, 설명 ≤ 14자. big `t` ≤ 12자(줄바꿈 \n), `sub` ≤ 16자.
-- 화면 종류: app, chat, step, ba, baapp, pills, lock, cards, cta, end, big. `over`(동그라미 기호), `pill`(말풍선)은 일부 화면에 덧붙일 수 있다. `pill`을 쓰면 자막 영역(y>1050)과 겹치지 않는지 생각한다.
+- 화면 종류: app, chat, step, ba, baapp, pills, lock, cards, cta, end, big, **ledger, quiz, calc**.
+- 앱 화면 3종(앱 만들기 편용): `ledger`(가계부: `title`, `items`[{t, amt}] 최대 4개, `total`, `tag`, `stamp`), `quiz`(`title`, `q` ≤ 24자, `choices` 3개 ≤ 10자, `pick`=정답 인덱스), `calc`(`title`, `fields`[[라벨, 값]] 최대 2개, `result` ≤ 18자). 모두 `now`, `banner`, `stamp`, `tag`, `accent`를 쓸 수 있다. 할 일 앱이 아닌 편에서는 `app`(할 일 목록) 대신 이것들을 쓴다.
+- **첫 장면(후킹) v에는 `"now": true`를 넣는다**(첫 프레임부터 모든 요소를 보여 준다). `over`(동그라미 기호), `pill`(말풍선)은 일부 화면에 덧붙일 수 있다. `pill`을 쓰면 자막 영역(y>1050)과 겹치지 않는지 생각한다.
 - step 장면은 n=1,2,3 순서로, icon은 bubble/cursor/wrench.
 
 ## 작업 방법

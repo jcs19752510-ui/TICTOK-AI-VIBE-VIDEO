@@ -143,6 +143,29 @@ function visual(v, lt, d) {
       if (v.copied) out += pill(640, by - 70, 280, 60, "#38c9bb", "#06201d", "복사됨 ✓", P(lt, 1.6, 1.9), 1, 34);
     }
     if (v.stamp) out += box(760, yy - 100, 220, 130, "background:" + (v.stampBg || "#ff3b61") + ";color:" + (v.stampFg || "#fff") + ";border-radius:40px;font-size:66px;font-weight:900;text-align:center;line-height:130px;opacity:" + P(lt, 0.8, 1.1), esc(v.stamp));
+  } else if (k === "ledger" || k === "quiz" || k === "calc") {
+    var cy = v.y === undefined ? (v.tag ? 290 : 250) : v.y, acc = v.accent || "#0b8a80", body = "", ttl = v.title || (k === "ledger" ? "가계부" : k === "quiz" ? "단어 퀴즈" : "변환기");
+    if (k === "ledger") {
+      (v.items || []).forEach(function (it, i) {
+        var sh = E(P(lt, 0.1 + i * 0.15, 0.4 + i * 0.15));
+        body += '<div style="position:absolute;left:0;right:0;top:' + (i * 100) + 'px;height:100px;opacity:' + sh + ';border-bottom:2px solid #e3edf0"><div style="position:absolute;left:32px;top:0;line-height:100px;font-size:40px;color:#12202a">' + esc(it.t) + '</div><div style="position:absolute;right:32px;top:0;line-height:100px;font-size:40px;font-weight:900;color:#12202a">' + esc(it.amt) + "</div></div>";
+      });
+      if (v.total) body += '<div style="position:absolute;left:24px;right:24px;top:' + ((v.items || []).length * 100 + 16) + 'px;height:96px;border-radius:24px;background:' + acc + ';color:#fff;opacity:' + P(lt, 0.8, 1.1) + '"><div style="position:absolute;left:28px;line-height:96px;font-size:40px;font-weight:900">합계</div><div style="position:absolute;right:28px;line-height:96px;font-size:44px;font-weight:900">' + esc(v.total) + "</div></div>";
+    } else if (k === "quiz") {
+      body += '<div style="position:absolute;left:32px;right:32px;top:12px;font-size:50px;font-weight:900;line-height:1.3;color:#12202a">' + esc(v.q || "") + "</div>";
+      (v.choices || []).forEach(function (c, i) {
+        var ok = v.pick === i && lt > 1.0;
+        body += '<div style="position:absolute;left:32px;right:32px;top:' + (170 + i * 112) + 'px;height:92px;border-radius:46px;border:4px solid ' + (ok ? "#0b8a80" : "#c9d8de") + ';background:' + (ok ? "#d6f5ef" : "#fff") + ';line-height:84px;padding-left:36px;font-size:40px;font-weight:' + (ok ? 900 : 500) + ';color:#12202a">' + esc(c) + "</div>";
+      });
+    } else {
+      (v.fields || []).forEach(function (f, i) {
+        body += '<div style="position:absolute;left:32px;right:32px;top:' + (i * 150) + 'px"><div style="font-size:30px;color:#5b6b76;font-weight:900">' + esc(f[0]) + '</div><div style="margin-top:8px;height:80px;border-radius:20px;border:3px solid #d3e0e5;background:#fff;line-height:74px;padding-left:24px;font-size:44px;color:#12202a">' + esc(f[1]) + "</div></div>";
+      });
+      if (v.result) body += '<div style="position:absolute;left:24px;right:24px;top:' + ((v.fields || []).length * 150 + 8) + 'px;height:120px;border-radius:28px;background:' + acc + ';color:#fff;text-align:center;line-height:120px;font-size:54px;font-weight:900;opacity:' + P(lt, 0.9, 1.2) + '">' + esc(v.result) + "</div>";
+    }
+    out += (v.tag ? tag(v.tag, 205) : "") + box(190, cy, 700, 700, "", '<div style="position:absolute;inset:0;border-radius:40px;background:#f7fbfc;box-shadow:0 30px 80px rgba(0,0,0,.45);overflow:hidden"><div style="height:120px;background:' + acc + ';color:#fff;font-size:46px;font-weight:900;line-height:120px;padding-left:36px">' + esc(ttl) + '</div><div style="position:absolute;left:0;right:0;top:140px;bottom:0">' + body + "</div></div>");
+    if (v.banner) out += box(150, cy + 590, 780, 150, "border-radius:28px;background:#3a1620;border:4px solid #ff5a7a;color:#ffd5dd;padding:22px 28px;font-size:34px;font-weight:900;line-height:1.35;opacity:" + P(lt, v.now ? -1 : 0.5, v.now ? -0.7 : 0.8), esc(v.banner));
+    if (v.stamp) out += box(760, cy - 100, 220, 130, "background:" + (v.stampBg || "#ff3b61") + ";color:" + (v.stampFg || "#fff") + ";border-radius:40px;font-size:66px;font-weight:900;text-align:center;line-height:130px;opacity:" + P(lt, 0.8, 1.1), esc(v.stamp));
   } else if (k === "chat") {
     var ts = d * 0.72, sent = lt > ts;
     if (v.typed) out += chatWin({ lt: lt, typed: sent ? "" : typed(v.typed, P(lt, 0.2, ts - 0.2)), caret: !sent, user: sent ? v.typed : "", ai: lt > ts + 0.6 ? (v.ai || "") : "", aiList: lt > ts + 0.6 ? v.list : null, scale: 1 + 0.04 * P(lt, 0, d), origin: "50% 80%", placeholder: v.placeholder });
