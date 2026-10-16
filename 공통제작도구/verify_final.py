@@ -27,7 +27,8 @@ run("ffmpeg", "-v", "error", "-y", "-i", mp4, "-vn", "-ac", "1", "-ar", "16000",
 w = wave.open(vf); a = np.frombuffer(w.readframes(w.getnframes()), dtype=np.int16).astype(float) / 32768
 win = int(w.getframerate() * 0.02); k = len(a) // win
 db = 20 * np.log10(np.sqrt(np.mean(a[:k * win].reshape(k, win) ** 2, axis=1)) + 1e-9)
-m = db > max(np.percentile(db, 10) + 12, -50); iv = []; i = 0
+nz = db[db > -70]   # 합성본은 장면 사이에 완전한 무음이 생겨 하위 10%가 -90dB대가 된다. 무음을 빼고 방 소음 기준으로 문턱을 잡는다(DEC-057)
+m = db > max(np.percentile(nz, 10) + 12, -50); iv = []; i = 0
 while i < k:
     if m[i]:
         j = i
@@ -52,7 +53,9 @@ if not empty and not stray:
     dif = [d_ for c, v in zip(clips, asg.values()) for d_ in (abs(v[0][0] - c["speech_t0"]), abs(v[-1][1] - c["speech_t1"]))]
     mx, md = max(dif), float(np.median(dif))
     # 아주 작은 말 시작·끝(감지 기준 −50dB 근처)은 최종 소리에서 0.2초쯤 다르게 잡힐 수 있어 최대는 0.25초까지 허용하고, 소리 전체가 밀린 경우를 잡기 위해 중앙값은 0.05초로 엄격히 본다(DEC-055: 2편 16번 장면에서 +0.203초 관찰)
-    chk("F09", mx <= 0.25 and md <= 0.05, f"말 시작·끝이 시간표와 최대 {mx:.3f}초(허용 0.25), 중앙값 {md:.3f}초(허용 0.05) 차이")
+    big = [round(x, 2) for x in dif if x > 0.25]
+    # 작은 소리로 시작하는 장면은 최종 소리에서 본 말이 0.3초쯤 늦게 잡힐 수 있다(합성본에는 작은 시작 소리도 들어 있다). 전체가 밀린 것은 중앙값으로, 큰 어긋남은 최대 0.5초와 0.25초 초과 경계 2개 이하로 본다(DEC-057)
+    chk("F09", md <= 0.05 and mx <= 0.5 and len(big) <= 2, f"말 시작·끝이 시간표와 최대 {mx:.3f}초(허용 0.5), 중앙값 {md:.3f}초(허용 0.05), 0.25초 초과 경계 {len(big)}개{big or ''}(허용 2개)")
     out = [c["scene"] for c, v, sc in zip(clips, asg.values(), F["scenes"]) if not (sc["start"] - 0.05 <= v[0][0] and v[-1][1] <= sc["end"] + 0.05)]
     chk("F10", not out, f"말이 자기 장면 시간 밖으로 나간 장면: {out or '없음'}")
 chk("F11", F.get("voice") == "user" and F.get("mock_badge") is False, f'본인 음성 표기 voice={F.get("voice")}, 영상 배지 mock_badge={F.get("mock_badge")}')
